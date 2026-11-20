@@ -1,243 +1,124 @@
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flame/game.dart';
 
-import 'apex_game.dart';
+void main() => runApp(const QuizApp());
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
-
-  runApp(const ApexApp());
+class Question {
+  const Question(this.text, this.options, this.answer);
+  final String text;
+  final List<String> options;
+  final int answer;
 }
 
-class ApexApp extends StatelessWidget {
-  const ApexApp({super.key});
+const questions = [
+  Question('What is the capital of Egypt?', ['Alexandria', 'Cairo', 'Giza', 'Luxor'], 1),
+  Question('Which language does Flutter use?', ['Java', 'Kotlin', 'Dart', 'Swift'], 2),
+  Question('How many continents are there?', ['5', '6', '7', '8'], 2),
+  Question('Which planet is closest to the Sun?', ['Venus', 'Mercury', 'Mars', 'Earth'], 1),
+];
+
+class QuizApp extends StatelessWidget {
+  const QuizApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: RacingScreen(),
+    return MaterialApp(
+      title: 'Quiz',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.purple),
+        useMaterial3: true,
+      ),
+      home: const QuizPage(),
     );
   }
 }
 
-class RacingScreen extends StatefulWidget {
-  const RacingScreen({super.key});
+class QuizPage extends StatefulWidget {
+  const QuizPage({super.key});
 
   @override
-  State<RacingScreen> createState() => _RacingScreenState();
+  State<QuizPage> createState() => _QuizPageState();
 }
 
-class _RacingScreenState extends State<RacingScreen> {
-  late final ApexGame game;
+class _QuizPageState extends State<QuizPage> {
+  int _index = 0;
+  int _score = 0;
+  int? _picked;
 
-  @override
-  void initState() {
-    super.initState();
-    game = ApexGame();
+  void _pick(int i) {
+    if (_picked != null) return;
+    setState(() {
+      _picked = i;
+      if (i == questions[_index].answer) _score++;
+    });
   }
 
-  @override
-  void dispose() {
-    game.speedNotifier.dispose();
-    game.scoreNotifier.dispose();
-    game.bestNotifier.dispose();
-    super.dispose();
-  }
-
-  Widget control({
-    required IconData icon,
-    required String label,
-    required VoidCallback down,
-    required VoidCallback up,
-  }) {
-    return Listener(
-      onPointerDown: (_) => down(),
-      onPointerUp: (_) => up(),
-      onPointerCancel: (_) => up(),
-      child: Container(
-        width: 66,
-        height: 66,
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white54),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: Colors.white, size: 29),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget hud() {
-    return Positioned(
-      top: 12,
-      left: 15,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.65),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'APEX',
-              style: TextStyle(
-                color: Colors.redAccent,
-                fontSize: 21,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 3,
-              ),
-            ),
-            ValueListenableBuilder<int>(
-              valueListenable: game.speedNotifier,
-              builder: (_, speed, __) => Text(
-                '$speed KM/H',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            ValueListenableBuilder<int>(
-              valueListenable: game.scoreNotifier,
-              builder: (_, score, __) => Text(
-                'DISTANCE: $score',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-            ValueListenableBuilder<int>(
-              valueListenable: game.bestNotifier,
-              builder: (_, best, __) => Text(
-                'BEST: $best',
-                style: const TextStyle(
-                  color: Colors.amber,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  Color? _tileColor(int i) {
+    final picked = _picked;
+    if (picked == null) return null;
+    if (i == questions[_index].answer) return Colors.green.shade100;
+    if (i == picked) return Colors.red.shade100;
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_index >= questions.length) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Quiz')),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Score: $_score of ' + questions.length.toString(),
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: () => setState(() {
+                  _index = 0;
+                  _score = 0;
+                  _picked = null;
+                }),
+                child: const Text('Play again'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final q = questions[_index];
     return Scaffold(
-      body: Focus(
-        autofocus: true,
-        onKeyEvent: (node, event) {
-          final down = event is KeyDownEvent;
-          final up = event is KeyUpEvent;
-
-          if (!down && !up) {
-            return KeyEventResult.ignored;
-          }
-
-          final key = event.logicalKey;
-
-          if (key == LogicalKeyboardKey.arrowLeft ||
-              key == LogicalKeyboardKey.keyA) {
-            game.setSteering(down ? -1 : 0);
-            return KeyEventResult.handled;
-          }
-
-          if (key == LogicalKeyboardKey.arrowRight ||
-              key == LogicalKeyboardKey.keyD) {
-            game.setSteering(down ? 1 : 0);
-            return KeyEventResult.handled;
-          }
-
-          if (key == LogicalKeyboardKey.arrowUp ||
-              key == LogicalKeyboardKey.space) {
-            game.setAccelerating(down);
-            return KeyEventResult.handled;
-          }
-
-          if (key == LogicalKeyboardKey.arrowDown) {
-            game.setBraking(down);
-            return KeyEventResult.handled;
-          }
-
-          return KeyEventResult.ignored;
-        },
-        child: Stack(
+      appBar: AppBar(
+        title: Text(
+          'Question ' + (_index + 1).toString() + ' of ' + questions.length.toString(),
+        ),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Positioned.fill(
-              child: GameWidget<ApexGame>(game: game),
-            ),
-
-            hud(),
-
-            Positioned(
-              bottom: 20,
-              left: 20,
-              child: Row(
-                children: [
-                  control(
-                    icon: Icons.arrow_left,
-                    label: 'LEFT',
-                    down: () => game.setSteering(-1),
-                    up: () => game.setSteering(0),
-                  ),
-                  const SizedBox(width: 12),
-                  control(
-                    icon: Icons.arrow_right,
-                    label: 'RIGHT',
-                    down: () => game.setSteering(1),
-                    up: () => game.setSteering(0),
-                  ),
-                ],
+            Text(q.text, style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 16),
+            for (var i = 0; i < q.options.length; i++)
+              Card(
+                color: _tileColor(i),
+                child: ListTile(
+                  title: Text(q.options[i]),
+                  onTap: () => _pick(i),
+                ),
               ),
-            ),
-
-            Positioned(
-              bottom: 20,
-              right: 20,
-              child: Row(
-                children: [
-                  control(
-                    icon: Icons.arrow_downward,
-                    label: 'BRAKE',
-                    down: () => game.setBraking(true),
-                    up: () => game.setBraking(false),
-                  ),
-                  const SizedBox(width: 12),
-                  control(
-                    icon: Icons.local_gas_station,
-                    label: 'GAS',
-                    down: () => game.setAccelerating(true),
-                    up: () => game.setAccelerating(false),
-                  ),
-                ],
+            const Spacer(),
+            if (_picked != null)
+              FilledButton(
+                onPressed: () => setState(() {
+                  _index++;
+                  _picked = null;
+                }),
+                child: Text(_index == questions.length - 1 ? 'See result' : 'Next'),
               ),
-            ),
           ],
         ),
       ),
