@@ -1,53 +1,245 @@
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flame/game.dart';
 
-void main() => runApp(const MyApp());
+import 'apex_game.dart';
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
+
+  runApp(const ApexApp());
+}
+
+class ApexApp extends StatelessWidget {
+  const ApexApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Counter',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-        useMaterial3: true,
-      ),
-      home: const CounterPage(),
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: RacingScreen(),
     );
   }
 }
 
-class CounterPage extends StatefulWidget {
-  const CounterPage({super.key});
+class RacingScreen extends StatefulWidget {
+  const RacingScreen({super.key});
 
   @override
-  State<CounterPage> createState() => _CounterPageState();
+  State<RacingScreen> createState() => _RacingScreenState();
 }
 
-class _CounterPageState extends State<CounterPage> {
-  int _count = 0;
+class _RacingScreenState extends State<RacingScreen> {
+  late final ApexGame game;
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Counter')),
-      body: Center(
+  void initState() {
+    super.initState();
+    game = ApexGame();
+  }
+
+  @override
+  void dispose() {
+    game.speedNotifier.dispose();
+    game.scoreNotifier.dispose();
+    game.bestNotifier.dispose();
+    super.dispose();
+  }
+
+  Widget control({
+    required IconData icon,
+    required String label,
+    required VoidCallback down,
+    required VoidCallback up,
+  }) {
+    return Listener(
+      onPointerDown: (_) => down(),
+      onPointerUp: (_) => up(),
+      onPointerCancel: (_) => up(),
+      child: Container(
+        width: 66,
+        height: 66,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white54),
+        ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('$_count', style: Theme.of(context).textTheme.displayLarge),
-            const SizedBox(height: 24),
-            OutlinedButton(
-              onPressed: () => setState(() => _count = 0),
-              child: const Text('Reset'),
+            Icon(icon, color: Colors.white, size: 29),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => setState(() => _count++),
-        child: const Icon(Icons.add),
+    );
+  }
+
+  Widget hud() {
+    return Positioned(
+      top: 12,
+      left: 15,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.65),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'APEX',
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontSize: 21,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 3,
+              ),
+            ),
+            ValueListenableBuilder<int>(
+              valueListenable: game.speedNotifier,
+              builder: (_, speed, __) => Text(
+                '$speed KM/H',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            ValueListenableBuilder<int>(
+              valueListenable: game.scoreNotifier,
+              builder: (_, score, __) => Text(
+                'DISTANCE: $score',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            ValueListenableBuilder<int>(
+              valueListenable: game.bestNotifier,
+              builder: (_, best, __) => Text(
+                'BEST: $best',
+                style: const TextStyle(
+                  color: Colors.amber,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          final down = event is KeyDownEvent;
+          final up = event is KeyUpEvent;
+
+          if (!down && !up) {
+            return KeyEventResult.ignored;
+          }
+
+          final key = event.logicalKey;
+
+          if (key == LogicalKeyboardKey.arrowLeft ||
+              key == LogicalKeyboardKey.keyA) {
+            game.setSteering(down ? -1 : 0);
+            return KeyEventResult.handled;
+          }
+
+          if (key == LogicalKeyboardKey.arrowRight ||
+              key == LogicalKeyboardKey.keyD) {
+            game.setSteering(down ? 1 : 0);
+            return KeyEventResult.handled;
+          }
+
+          if (key == LogicalKeyboardKey.arrowUp ||
+              key == LogicalKeyboardKey.space) {
+            game.setAccelerating(down);
+            return KeyEventResult.handled;
+          }
+
+          if (key == LogicalKeyboardKey.arrowDown) {
+            game.setBraking(down);
+            return KeyEventResult.handled;
+          }
+
+          return KeyEventResult.ignored;
+        },
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: GameWidget<ApexGame>(game: game),
+            ),
+
+            hud(),
+
+            Positioned(
+              bottom: 20,
+              left: 20,
+              child: Row(
+                children: [
+                  control(
+                    icon: Icons.arrow_left,
+                    label: 'LEFT',
+                    down: () => game.setSteering(-1),
+                    up: () => game.setSteering(0),
+                  ),
+                  const SizedBox(width: 12),
+                  control(
+                    icon: Icons.arrow_right,
+                    label: 'RIGHT',
+                    down: () => game.setSteering(1),
+                    up: () => game.setSteering(0),
+                  ),
+                ],
+              ),
+            ),
+
+            Positioned(
+              bottom: 20,
+              right: 20,
+              child: Row(
+                children: [
+                  control(
+                    icon: Icons.arrow_downward,
+                    label: 'BRAKE',
+                    down: () => game.setBraking(true),
+                    up: () => game.setBraking(false),
+                  ),
+                  const SizedBox(width: 12),
+                  control(
+                    icon: Icons.local_gas_station,
+                    label: 'GAS',
+                    down: () => game.setAccelerating(true),
+                    up: () => game.setAccelerating(false),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
